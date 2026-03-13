@@ -1,4 +1,6 @@
 import { Routes, Route, NavLink } from "react-router-dom";
+import { useAuth } from "./context/AuthContext";
+import Login from "./pages/Login";
 import Live from "./pages/Live";
 import Playback from "./pages/Playback";
 import PDVs from "./pages/PDVs";
@@ -21,6 +23,10 @@ const navLinkStyle = ({ isActive }: { isActive: boolean }) => ({
 });
 
 function App() {
+  const { user, logout } = useAuth();
+
+  if (!user) return <Login />;
+
   return (
     <div style={{ fontFamily: "system-ui, sans-serif", minHeight: "100vh", background: "#f5f5f5" }}>
       <header
@@ -36,13 +42,30 @@ function App() {
         <h1 style={{ margin: 0, fontSize: "1.25rem", whiteSpace: "nowrap" }}>
           HappyDo Guard
         </h1>
-        <nav style={{ display: "flex", gap: "0.5rem" }}>
+        <nav style={{ display: "flex", gap: "0.5rem", flex: 1 }}>
           {navItems.map((item) => (
             <NavLink key={item.to} to={item.to} style={navLinkStyle} end>
               {item.label}
             </NavLink>
           ))}
         </nav>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem", fontSize: "0.8rem" }}>
+          <span style={{ opacity: 0.7 }}>{user.email}</span>
+          <button
+            onClick={logout}
+            style={{
+              padding: "0.3rem 0.75rem",
+              background: "rgba(255,255,255,0.1)",
+              color: "#fff",
+              border: "1px solid rgba(255,255,255,0.2)",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontSize: "0.8rem",
+            }}
+          >
+            Sair
+          </button>
+        </div>
       </header>
       <main style={{ padding: "1.5rem" }}>
         <Routes>

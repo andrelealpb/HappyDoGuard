@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext";
 
 interface PDV {
   id: string;
@@ -13,10 +14,11 @@ interface PDV {
 }
 
 function PDVs() {
+  const { apiFetch } = useAuth();
   const [pdvs, setPdvs] = useState<PDV[]>([]);
 
   useEffect(() => {
-    fetch("/api/pdvs")
+    apiFetch("/api/pdvs")
       .then((res) => res.json())
       .then(setPdvs)
       .catch(console.error);

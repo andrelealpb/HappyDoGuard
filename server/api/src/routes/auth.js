@@ -33,6 +33,30 @@ router.post('/login', async (req, res) => {
   }
 });
 
+// POST /api/auth/setup — Create first admin (only works when no users exist)
+router.post('/setup', async (req, res) => {
+  try {
+    const { rows: existing } = await pool.query('SELECT COUNT(*) FROM users');
+    if (parseInt(existing[0].count) > 0) {
+      return res.status(403).json({ error: 'Setup already completed. Use /api/auth/register instead.' });
+    }
+    const { email, password, full_name } = req.body;
+    if (!email || !password || !full_name) {
+      return res.status(400).json({ error: 'email, password, and full_name are required' });
+    }
+    const hashed = await hashPassword(password);
+    const { rows } = await pool.query(
+      `INSERT INTO users (email, hashed_password, full_name, role)
+       VALUES ($1, $2, $3, 'admin') RETURNING id, email, full_name, role, created_at`,
+      [email, hashed, full_name]
+    );
+    const token = generateToken(rows[0]);
+    res.status(201).json({ user: rows[0], access_token: token, token_type: 'bearer' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/auth/register (admin only)
 router.post('/register', authenticate, authorize('admin'), async (req, res) => {
   try {

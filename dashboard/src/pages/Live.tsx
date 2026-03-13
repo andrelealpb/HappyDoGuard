@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext";
 import HlsPlayer from "../components/HlsPlayer";
 
 interface Camera {
@@ -10,11 +11,12 @@ interface Camera {
 }
 
 function Live() {
+  const { apiFetch } = useAuth();
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [filter, setFilter] = useState<"all" | "online" | "offline">("all");
 
   useEffect(() => {
-    fetch("/api/cameras")
+    apiFetch("/api/cameras")
       .then((res) => res.json())
       .then(setCameras)
       .catch(console.error);

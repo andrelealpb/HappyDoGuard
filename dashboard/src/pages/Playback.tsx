@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext";
 
 interface Camera {
   id: string;
@@ -16,13 +17,14 @@ interface Recording {
 }
 
 function Playback() {
+  const { apiFetch } = useAuth();
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [selectedCamera, setSelectedCamera] = useState("");
   const [timestamp, setTimestamp] = useState("");
   const [recordings, setRecordings] = useState<Recording[]>([]);
 
   useEffect(() => {
-    fetch("/api/cameras")
+    apiFetch("/api/cameras")
       .then((res) => res.json())
       .then(setCameras)
       .catch(console.error);
@@ -30,7 +32,7 @@ function Playback() {
 
   const searchByTimestamp = () => {
     if (!selectedCamera || !timestamp) return;
-    fetch(`/api/cameras/${selectedCamera}/recording?timestamp=${timestamp}`)
+    apiFetch(`/api/cameras/${selectedCamera}/recording?timestamp=${timestamp}`)
       .then((res) => res.json())
       .then((data) => setRecordings(data.error ? [] : [data]))
       .catch(console.error);
@@ -38,7 +40,7 @@ function Playback() {
 
   const loadRecordings = () => {
     if (!selectedCamera) return;
-    fetch(`/api/cameras/${selectedCamera}/recordings?limit=20`)
+    apiFetch(`/api/cameras/${selectedCamera}/recordings?limit=20`)
       .then((res) => res.json())
       .then(setRecordings)
       .catch(console.error);
