@@ -1,0 +1,17 @@
+[Unit]
+Description=HappyDo Guard Deploy Webhook
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/happydo-guard/deploy
+ExecStart=/usr/bin/node /opt/happydo-guard/deploy/webhook.js
+Restart=always
+RestartSec=5
+Environment=WEBHOOK_PORT=9000
+Environment=DEPLOY_BRANCH=main
+EnvironmentFile=-/opt/happydo-guard/.env
+
+[Install]
+WantedBy=multi-user.target
