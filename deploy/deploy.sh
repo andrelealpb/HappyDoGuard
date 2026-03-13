@@ -11,7 +11,8 @@ cd "$DEPLOY_DIR"
 # Pull latest changes
 echo "$LOG_PREFIX Pulling latest code..."
 git fetch origin
-git reset --hard origin/main
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+git reset --hard "origin/$BRANCH"
 
 # Rebuild and restart containers
 echo "$LOG_PREFIX Building and restarting containers..."
