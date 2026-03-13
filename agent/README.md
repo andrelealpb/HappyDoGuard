@@ -1,0 +1,53 @@
+# HappyDo Guard — Agent (Pi Zero 2 W)
+
+Agent para câmeras **IC3/IC5 legadas** (~23 câmeras) que não possuem RTMP nativo.
+
+O Pi Zero 2 W fica na mesma rede local da câmera e faz a tradução RTSP → RTMP,
+enviando o stream para o servidor cloud.
+
+## Hardware
+
+- **Raspberry Pi Zero 2 W** (~R$ 130)
+- Cartão microSD 16GB
+- Fonte de alimentação 5V/2.5A
+- Raspberry Pi OS Lite (sem desktop)
+
+## Instalação
+
+```bash
+# No Pi Zero, via SSH
+curl -sSL https://raw.githubusercontent.com/andrelealpb/HappyDoGuard/main/agent/install.sh | bash
+```
+
+Ou manualmente:
+
+```bash
+sudo apt update && sudo apt install -y ffmpeg
+sudo cp happydo-agent.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable happydo-agent
+sudo systemctl start happydo-agent
+```
+
+## Configuração
+
+Edite `/etc/happydo-agent.conf`:
+
+```
+CAMERA_IP=192.168.1.100
+CAMERA_USER=admin
+CAMERA_PASS=CHAVE_6_CHARS
+RTSP_PORT=554
+SERVER_URL=rtmp://SEU_SERVIDOR:1935/live
+STREAM_KEY=sua_stream_key_aqui
+```
+
+## Verificação
+
+```bash
+# Status do serviço
+sudo systemctl status happydo-agent
+
+# Logs em tempo real
+journalctl -u happydo-agent -f
+```

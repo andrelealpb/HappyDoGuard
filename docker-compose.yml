@@ -1,8 +1,8 @@
 services:
   nginx-rtmp:
-    build: ./nginx-rtmp
+    build: ./server/nginx-rtmp
     ports:
-      - "1935:1935"   # RTMP ingest
+      - "1935:1935"   # RTMP ingest (câmeras)
       - "8080:8080"   # HLS playback + stats
     volumes:
       - hls_data:/data/hls
@@ -12,21 +12,20 @@ services:
     restart: unless-stopped
 
   api:
-    build: ./api
+    build: ./server/api
     ports:
       - "8000:8000"
     environment:
-      - HAPPYDO_DATABASE_URL=postgresql+asyncpg://happydo:happydo@db:5432/happydo_guard
-      - HAPPYDO_REDIS_URL=redis://redis:6379/0
-      - HAPPYDO_SECRET_KEY=${SECRET_KEY:-change-me-in-production}
-      - HAPPYDO_DEBUG=${DEBUG:-false}
+      - DATABASE_URL=postgresql://happydo:happydo@db:5432/happydo_guard
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - RTMP_HOST=nginx-rtmp
+      - HLS_BASE_URL=http://nginx-rtmp:8080/hls
+      - PORT=8000
     volumes:
       - recordings:/data/recordings
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_started
     restart: unless-stopped
 
   dashboard:
@@ -55,16 +54,7 @@ services:
       retries: 5
     restart: unless-stopped
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
-
 volumes:
   pgdata:
-  redis_data:
   hls_data:
   recordings:
