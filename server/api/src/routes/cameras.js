@@ -37,7 +37,7 @@ router.get('/', authenticate, async (req, res) => {
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const { rows } = await pool.query(
       `SELECT c.*, p.name as pdv_name, p.code as pdv_code
-       FROM cameras c JOIN pdvs p ON c.pdv_id = p.id
+       FROM cameras c LEFT JOIN pdvs p ON c.pdv_id = p.id
        ${where} ORDER BY p.name, c.name`,
       params
     );
@@ -124,7 +124,7 @@ router.get('/:id', authenticate, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT c.*, p.name as pdv_name, p.code as pdv_code
-       FROM cameras c JOIN pdvs p ON c.pdv_id = p.id
+       FROM cameras c LEFT JOIN pdvs p ON c.pdv_id = p.id
        WHERE c.id = $1`,
       [req.params.id]
     );
@@ -272,8 +272,8 @@ router.get('/:id/recording', authenticate, async (req, res) => {
 router.get('/stream-names', authenticate, async (_req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT stream_key, name, c.id as camera_id, p.name as pdv_name
-       FROM cameras c JOIN pdvs p ON c.pdv_id = p.id`
+      `SELECT stream_key, c.name, c.id as camera_id, p.name as pdv_name
+       FROM cameras c LEFT JOIN pdvs p ON c.pdv_id = p.id`
     );
     const map = {};
     for (const row of rows) {
