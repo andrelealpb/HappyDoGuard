@@ -10,18 +10,22 @@ router.get('/on-publish', async (req, res) => {
   try {
     const { name: streamKey, addr } = req.query;
 
-    // Validate stream key
-    const { rows } = await pool.query(
-      'SELECT id, recording_mode, name FROM cameras WHERE stream_key = $1',
-      [streamKey]
-    );
+    // Validate stream key — fetch all and match in JS to debug DB query issue
+    const { rows: allCams } = await pool.query('SELECT id, stream_key, name FROM cameras');
+    const camera = allCams.find(c => c.stream_key === streamKey);
 
-    if (rows.length === 0) {
-      // Debug: dump all stream keys from DB for comparison
-      const { rows: allCams } = await pool.query('SELECT stream_key, length(stream_key) as len FROM cameras');
+    if (!camera) {
       console.log(`Rejected stream key: "${streamKey}" (len=${streamKey?.length}) from ${addr}`);
-      console.log(`DB stream keys: ${JSON.stringify(allCams.map(r => ({ key: r.stream_key, len: r.len })))}`);
+      console.log(`DB keys: ${JSON.stringify(allCams.map(r => r.stream_key))}`);
       return res.status(403).end();
+    }
+
+    // Fetch recording_mode separately (may not exist if migration 003 not applied)
+    try {
+      const { rows: modeRows } = await pool.query('SELECT recording_mode FROM cameras WHERE id = $1', [camera.id]);
+      camera.recording_mode = modeRows[0]?.recording_mode;
+    } catch {
+      camera.recording_mode = 'continuous';
     }
 
     const camera = rows[0];
