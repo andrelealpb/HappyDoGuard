@@ -46,14 +46,17 @@ export function authenticate(req, res, next) {
     return;
   }
 
-  // Try JWT
+  // Try JWT from header or query parameter (query param needed for <video src="...">)
   const header = req.headers.authorization;
-  if (!header?.startsWith('Bearer ')) {
+  const tokenFromQuery = req.query.token;
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : tokenFromQuery;
+
+  if (!token) {
     return res.status(401).json({ error: 'Missing authentication' });
   }
 
   try {
-    const decoded = verifyToken(header.slice(7));
+    const decoded = verifyToken(token);
     req.auth = { type: 'jwt', user: decoded };
     next();
   } catch {
