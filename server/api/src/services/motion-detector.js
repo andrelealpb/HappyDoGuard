@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 import { pool } from '../db/pool.js';
 import { startRecording, stopRecording, isRecording } from './recorder.js';
-import { detectFaces, storeFaceEmbeddings, checkWatchlist, isFaceServiceHealthy } from './face-recognition.js';
+import { detectFaces, storeFaceEmbeddings, checkWatchlist, isFaceServiceHealthy, countDistinctVisitors } from './face-recognition.js';
 
 // Per-camera state
 const cameraStates = new Map();
@@ -134,6 +134,10 @@ function extractFrameJpeg(hlsUrl) {
   });
 }
 
+// Track last visitor computation per camera to avoid running too often
+const lastVisitorComputation = new Map();
+const VISITOR_COMPUTATION_INTERVAL = 5 * 60 * 1000; // Recompute at most every 5 minutes
+
 // Process face detection for a frame (runs async, doesn't block motion detection)
 async function processFaces(camera, hlsUrl) {
   try {
@@ -147,6 +151,19 @@ async function processFaces(camera, hlsUrl) {
     // Check against watchlist
     if (embeddingIds.length > 0) {
       await checkWatchlist(camera.id, embeddingIds);
+    }
+
+    // Compute daily visitor count (throttled to avoid excess DB load)
+    const now = Date.now();
+    const lastComputed = lastVisitorComputation.get(camera.id) || 0;
+    if (now - lastComputed >= VISITOR_COMPUTATION_INTERVAL) {
+      lastVisitorComputation.set(camera.id, now);
+      const today = new Date().toISOString().split('T')[0];
+      countDistinctVisitors(camera.id, today).catch((err) => {
+        if (Math.random() < 0.1) {
+          console.error(`[Visitors] Computation error for camera ${camera.name}:`, err.message?.slice(0, 100));
+        }
+      });
     }
   } catch (err) {
     // Only log occasionally to avoid spam
