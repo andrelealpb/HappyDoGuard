@@ -272,6 +272,10 @@ function VideoPlayer({
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.15rem" }}>
+          <a href={`/api/recordings/${recording.id}/thumbnail?token=${encodeURIComponent(token)}`}
+            download={`thumb-${recording.id}.jpg`}
+            title="Baixar imagem"
+            style={{ ...cb, textDecoration: "none", color: "#fff" }}>&#128247;</a>
           <button onClick={() => { setMuted(!muted); if (videoRef.current) videoRef.current.muted = !muted; }} style={cb}>
             {muted ? "\uD83D\uDD07" : "\uD83D\uDD0A"}
           </button>
@@ -284,8 +288,8 @@ function VideoPlayer({
 
 // ─── Recording List ───
 
-function RecordingList({ recordings, selectedRecording, onSelect }: {
-  recordings: Recording[]; selectedRecording: Recording | null; onSelect: (r: Recording) => void;
+function RecordingList({ recordings, selectedRecording, onSelect, token }: {
+  recordings: Recording[]; selectedRecording: Recording | null; onSelect: (r: Recording) => void; token: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -320,6 +324,15 @@ function RecordingList({ recordings, selectedRecording, onSelect }: {
                 {r.file_size ? <span>{formatBytes(r.file_size)}</span> : null}
               </div>
             </div>
+            <a href={`/api/recordings/${r.id}/thumbnail?token=${encodeURIComponent(token)}`}
+              onClick={(e) => e.stopPropagation()}
+              download={`thumb-${r.id}.jpg`}
+              title="Baixar imagem"
+              style={{ flexShrink: 0, padding: "0.2rem 0.35rem", borderRadius: "3px", background: "#f5f5f5",
+                border: "1px solid #ddd", cursor: "pointer", fontSize: "0.75rem", color: "#555", textDecoration: "none",
+                display: "flex", alignItems: "center" }}>
+              &#128247;
+            </a>
           </div>
         );
       })}
@@ -443,7 +456,7 @@ function Playback() {
               <div style={{ fontSize: "0.7rem", fontWeight: 600, color: "#333", padding: "0.2rem 0.4rem 0.35rem", borderBottom: "1px solid #eee", marginBottom: "0.35rem" }}>
                 {formatDate(displayDate)} — {selectedCamera?.name}
               </div>
-              <RecordingList recordings={recordings} selectedRecording={selectedRecording} onSelect={setSelectedRecording} />
+              <RecordingList recordings={recordings} selectedRecording={selectedRecording} onSelect={setSelectedRecording} token={token || ""} />
             </div>
           )}
         </div>
