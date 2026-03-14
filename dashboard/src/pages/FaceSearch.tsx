@@ -12,11 +12,15 @@ interface Appearance {
   confidence: number;
   detected_at: string;
   face_image: string | null;
+  first_seen: string;
+  last_seen: string;
+  detections: number;
 }
 
 interface SearchResult {
   query_confidence: number;
   total: number;
+  total_raw: number;
   appearances: Appearance[];
 }
 
@@ -244,7 +248,7 @@ function FaceSearch() {
             {result && (
               <>
                 <div style={{ fontSize: "0.85rem", marginBottom: "0.5rem", color: "#555" }}>
-                  {result.total} aparição(ões) encontrada(s) — confiança da query: {(result.query_confidence * 100).toFixed(0)}%
+                  {result.total} momento(s) distinto(s) ({result.total_raw} detecções) — confiança da query: {(result.query_confidence * 100).toFixed(0)}%
                 </div>
 
                 {result.appearances.length === 0 ? (
@@ -261,12 +265,19 @@ function FaceSearch() {
                           />
                         )}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 600, fontSize: "0.8rem" }}>
+                          <div style={{ fontWeight: 600, fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
                             {(a.similarity * 100).toFixed(1)}% match
+                            {a.detections > 1 && (
+                              <span style={{ fontSize: "0.65rem", background: "#e3f2fd", color: "#1565c0", padding: "0.1rem 0.35rem", borderRadius: "3px", fontWeight: 600 }}>
+                                {a.detections}x
+                              </span>
+                            )}
                           </div>
-                          <div style={{ fontSize: "0.7rem", color: "#666" }}>{a.pdv_name}</div>
-                          <div style={{ fontSize: "0.7rem", color: "#666" }}>{a.camera_name}</div>
-                          <div style={{ fontSize: "0.7rem", color: "#999" }}>{formatDateTime(a.detected_at)}</div>
+                          <div style={{ fontSize: "0.7rem", color: "#666" }}>{a.pdv_name} — {a.camera_name}</div>
+                          <div style={{ fontSize: "0.7rem", color: "#999" }}>
+                            {formatDateTime(a.first_seen)}
+                            {a.first_seen !== a.last_seen && ` → ${formatDateTime(a.last_seen)}`}
+                          </div>
                           <button
                             onClick={() => navigate(`/playback?camera_id=${a.camera_id}&timestamp=${encodeURIComponent(a.detected_at)}`)}
                             style={{ marginTop: "0.3rem", padding: "0.2rem 0.5rem", borderRadius: "3px", border: "1px solid #1a1a2e",
