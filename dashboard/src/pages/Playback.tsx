@@ -38,6 +38,9 @@ interface FaceAppearance {
   confidence: number;
   detected_at: string;
   face_image: string | null;
+  first_seen: string;
+  last_seen: string;
+  detections: number;
 }
 
 type PlaybackSpeed = 0.5 | 1 | 2 | 4;
@@ -711,7 +714,7 @@ function Playback() {
               <div style={{ background: "#fff", borderRadius: "6px", border: "1px solid #ddd", padding: "0.75rem", marginTop: "0.5rem" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
                   <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>
-                    {faceSearching ? "Buscando aparições..." : `${faceSearchResults?.length || 0} aparição(ões) encontrada(s)`}
+                    {faceSearching ? "Buscando aparições..." : `${faceSearchResults?.length || 0} momento(s) distinto(s)`}
                   </div>
                   <button
                     onClick={() => { setFaceSearchResults(null); setFaceSearching(false); }}
@@ -735,12 +738,20 @@ function Playback() {
                           />
                         )}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 600, fontSize: "0.75rem", color: "#2e7d32" }}>
+                          <div style={{ fontWeight: 600, fontSize: "0.75rem", color: "#2e7d32", display: "flex", alignItems: "center", gap: "0.3rem" }}>
                             {(a.similarity * 100).toFixed(0)}% match
+                            {a.detections > 1 && (
+                              <span style={{ fontSize: "0.6rem", background: "#e3f2fd", color: "#1565c0", padding: "0.05rem 0.3rem", borderRadius: "3px", fontWeight: 600 }}>
+                                {a.detections}x
+                              </span>
+                            )}
                           </div>
                           <div style={{ fontSize: "0.65rem", color: "#666" }}>{a.pdv_name} — {a.camera_name}</div>
                           <div style={{ fontSize: "0.65rem", color: "#999" }}>
-                            {new Date(a.detected_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                            {new Date(a.first_seen || a.detected_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                            {a.first_seen && a.last_seen && a.first_seen !== a.last_seen && (
+                              <> → {new Date(a.last_seen).toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</>
+                            )}
                           </div>
                         </div>
                         <button

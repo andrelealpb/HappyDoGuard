@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { existsSync, statSync } from 'fs';
 import { pool } from '../db/pool.js';
 import { authenticate } from '../services/auth.js';
 import { generateStreamKey, getHlsUrl, getRtmpUrl, getRtmpPublicUrl, getHlsPublicUrl } from '../services/rtmp.js';
@@ -292,6 +293,24 @@ router.get('/stream-names', authenticate, async (_req, res) => {
 // GET /api/cameras/disk-usage — Disk usage per camera
 router.get('/disk-usage', authenticate, async (_req, res) => {
   try {
+    // Backfill any recordings missing file_size (from nginx-rtmp hooks before fix)
+    const { rows: missing } = await pool.query(
+      'SELECT id, file_path FROM recordings WHERE file_size IS NULL'
+    );
+    if (missing.length > 0) {
+      let fixed = 0;
+      for (const rec of missing) {
+        try {
+          if (rec.file_path && existsSync(rec.file_path)) {
+            const size = statSync(rec.file_path).size;
+            await pool.query('UPDATE recordings SET file_size = $1 WHERE id = $2', [size, rec.id]);
+            fixed++;
+          }
+        } catch { /* skip */ }
+      }
+      if (fixed > 0) console.log(`[DiskUsage] Backfilled file_size for ${fixed}/${missing.length} recordings`);
+    }
+
     const { rows } = await pool.query(
       `SELECT c.id as camera_id, c.name, c.retention_days,
               COALESCE(SUM(r.file_size), 0)::bigint as total_bytes,
