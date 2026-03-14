@@ -37,8 +37,8 @@ router.get('/', authenticate, async (req, res) => {
     const { rows } = await pool.query(
       `SELECT e.*, c.name as camera_name, p.name as pdv_name
        FROM events e
-       JOIN cameras c ON e.camera_id = c.id
-       JOIN pdvs p ON c.pdv_id = p.id
+       LEFT JOIN cameras c ON e.camera_id = c.id
+       LEFT JOIN pdvs p ON c.pdv_id = p.id
        ${where} ORDER BY e.created_at DESC LIMIT $${idx++} OFFSET $${idx}`,
       [...params, parseInt(limit), parseInt(offset)]
     );
