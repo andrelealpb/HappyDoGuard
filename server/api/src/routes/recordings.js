@@ -306,7 +306,37 @@ router.post('/search-by-embedding', authenticate, async (req, res) => {
       face_image: r.face_image ? `/api/faces/image?path=${encodeURIComponent(r.face_image)}` : null,
     }));
 
-    res.json({ total: appearances.length, appearances });
+    // Group by distinct time moments (within 60s on the same camera = same moment)
+    const TIME_GAP_MS = 60 * 1000;
+    const grouped = [];
+    const sorted = [...appearances].sort((a, b) => {
+      if (a.camera_id !== b.camera_id) return a.camera_id.localeCompare(b.camera_id);
+      return new Date(a.detected_at).getTime() - new Date(b.detected_at).getTime();
+    });
+
+    for (const app of sorted) {
+      const t = new Date(app.detected_at).getTime();
+      const existing = grouped.find(
+        (g) => g.camera_id === app.camera_id && Math.abs(t - new Date(g.last_seen).getTime()) <= TIME_GAP_MS
+      );
+      if (existing) {
+        existing.detections++;
+        if (t < new Date(existing.first_seen).getTime()) existing.first_seen = app.detected_at;
+        if (t > new Date(existing.last_seen).getTime()) existing.last_seen = app.detected_at;
+        if (app.similarity > existing.similarity) {
+          existing.id = app.id;
+          existing.similarity = app.similarity;
+          existing.confidence = app.confidence;
+          existing.face_image = app.face_image;
+        }
+      } else {
+        grouped.push({ ...app, first_seen: app.detected_at, last_seen: app.detected_at, detections: 1 });
+      }
+    }
+
+    grouped.sort((a, b) => b.similarity - a.similarity);
+
+    res.json({ total: grouped.length, total_raw: appearances.length, appearances: grouped });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
