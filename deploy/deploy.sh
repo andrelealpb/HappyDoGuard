@@ -25,7 +25,6 @@ COMMIT_AUTHOR=$(git log -1 --pretty=%an)
 
 # Build each service individually to capture per-service build status
 BUILD_TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-BUILD_ARGS="--build-arg BUILD_COMMIT=$COMMIT_HASH --build-arg BUILD_BRANCH=$BRANCH --build-arg BUILD_TIMESTAMP=$BUILD_TIMESTAMP --build-arg BUILD_AUTHOR=$COMMIT_AUTHOR --build-arg BUILD_MESSAGE=$COMMIT_MSG"
 
 SERVICES="dashboard api face-service nginx-rtmp"
 BUILD_RESULTS=""
@@ -33,7 +32,13 @@ BUILD_RESULTS=""
 for SERVICE in $SERVICES; do
   echo "$LOG_PREFIX Building $SERVICE..."
   SERVICE_BUILD_START=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-  if docker compose build $BUILD_ARGS "$SERVICE" 2>&1; then
+  if docker compose build \
+    --build-arg "BUILD_COMMIT=$COMMIT_HASH" \
+    --build-arg "BUILD_BRANCH=$BRANCH" \
+    --build-arg "BUILD_TIMESTAMP=$BUILD_TIMESTAMP" \
+    --build-arg "BUILD_AUTHOR=$COMMIT_AUTHOR" \
+    --build-arg "BUILD_MESSAGE=$COMMIT_MSG" \
+    "$SERVICE" 2>&1; then
     SERVICE_BUILD_STATUS="success"
     echo "$LOG_PREFIX $SERVICE build: OK"
   else
