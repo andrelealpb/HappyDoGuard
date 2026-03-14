@@ -79,6 +79,8 @@ export async function detectPersons(jpegBuffer) {
 
 /**
  * Store detected face embeddings in database.
+ * Links identical faces to the same person_id while keeping all captures
+ * for better search accuracy. Uses vector similarity to find matching persons.
  */
 export async function storeFaceEmbeddings(cameraId, faces, detectedAt) {
   const ids = [];
@@ -99,11 +101,38 @@ export async function storeFaceEmbeddings(cameraId, faces, detectedAt) {
     // Serialize embedding as pgvector format
     const embeddingStr = `[${face.embedding.join(',')}]`;
 
+    // Find an existing person_id by matching against recent embeddings (last 30 days)
+    // Uses pgvector HNSW index for fast similarity search
+    let personId = null;
+    try {
+      const { rows: matches } = await pool.query(
+        `SELECT person_id, 1 - (embedding <=> $1::vector) AS similarity
+         FROM face_embeddings
+         WHERE person_id IS NOT NULL
+           AND detected_at > now() - interval '30 days'
+         ORDER BY embedding <=> $1::vector
+         LIMIT 1`,
+        [embeddingStr]
+      );
+
+      if (matches.length > 0 && matches[0].similarity >= VISITOR_THRESHOLD) {
+        personId = matches[0].person_id;
+      }
+    } catch {
+      // If person matching fails, continue without linking
+    }
+
+    // Generate new person_id if no match found
+    if (!personId) {
+      const { rows: uuidRows } = await pool.query('SELECT uuid_generate_v4() AS id');
+      personId = uuidRows[0].id;
+    }
+
     const { rows } = await pool.query(
-      `INSERT INTO face_embeddings (camera_id, embedding, face_image, confidence, detected_at)
-       VALUES ($1, $2::vector, $3, $4, $5)
+      `INSERT INTO face_embeddings (camera_id, embedding, face_image, confidence, detected_at, person_id)
+       VALUES ($1, $2::vector, $3, $4, $5, $6)
        RETURNING id`,
-      [cameraId, embeddingStr, facePath, face.confidence, detectedAt || new Date()]
+      [cameraId, embeddingStr, facePath, face.confidence, detectedAt || new Date(), personId]
     );
 
     ids.push(rows[0].id);
@@ -221,48 +250,61 @@ export async function searchFace(embedding, options = {}) {
 
 /**
  * Count distinct visitors for a camera on a given date.
- * Uses vector similarity to deduplicate faces.
+ * Uses person_id to count unique persons (much faster than O(n²) clustering).
+ * Falls back to greedy clustering for faces without person_id (legacy data).
  */
 export async function countDistinctVisitors(cameraId, date) {
-  // Get all face embeddings for this camera on this date
-  const { rows: faces } = await pool.query(
-    `SELECT id, embedding
+  // Count distinct person_ids for this camera on this date
+  const { rows: [result] } = await pool.query(
+    `SELECT
+       COUNT(DISTINCT person_id) AS linked_persons,
+       COUNT(*) FILTER (WHERE person_id IS NULL) AS unlinked_faces
      FROM face_embeddings
      WHERE camera_id = $1
-       AND detected_at::date = $2
-     ORDER BY detected_at`,
+       AND detected_at::date = $2`,
     [cameraId, date]
   );
 
-  if (faces.length === 0) return 0;
+  if (!result || (parseInt(result.linked_persons) === 0 && parseInt(result.unlinked_faces) === 0)) {
+    return 0;
+  }
 
-  // Cluster faces by similarity (greedy: each new face that doesn't match
-  // any existing cluster centroid starts a new cluster)
-  const clusters = [];
+  let distinctCount = parseInt(result.linked_persons);
 
-  for (const face of faces) {
-    let matched = false;
+  // For legacy faces without person_id, use greedy clustering as fallback
+  if (parseInt(result.unlinked_faces) > 0) {
+    const { rows: unlinkedFaces } = await pool.query(
+      `SELECT id, embedding
+       FROM face_embeddings
+       WHERE camera_id = $1
+         AND detected_at::date = $2
+         AND person_id IS NULL
+       ORDER BY detected_at`,
+      [cameraId, date]
+    );
 
-    for (const cluster of clusters) {
-      // Compare with cluster representative
-      const { rows } = await pool.query(
-        `SELECT 1 - (
-           (SELECT embedding FROM face_embeddings WHERE id = $1)
-           <=>
-           (SELECT embedding FROM face_embeddings WHERE id = $2)
-         ) AS similarity`,
-        [face.id, cluster.representative]
-      );
-
-      if (rows.length > 0 && rows[0].similarity >= VISITOR_THRESHOLD) {
-        matched = true;
-        break;
+    const clusters = [];
+    for (const face of unlinkedFaces) {
+      let matched = false;
+      for (const cluster of clusters) {
+        const { rows } = await pool.query(
+          `SELECT 1 - (
+             (SELECT embedding FROM face_embeddings WHERE id = $1)
+             <=>
+             (SELECT embedding FROM face_embeddings WHERE id = $2)
+           ) AS similarity`,
+          [face.id, cluster.representative]
+        );
+        if (rows.length > 0 && rows[0].similarity >= VISITOR_THRESHOLD) {
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        clusters.push({ representative: face.id });
       }
     }
-
-    if (!matched) {
-      clusters.push({ representative: face.id });
-    }
+    distinctCount += clusters.length;
   }
 
   // Upsert daily visitor count
@@ -271,43 +313,72 @@ export async function countDistinctVisitors(cameraId, date) {
      VALUES ($1, $2, $3, now())
      ON CONFLICT (camera_id, visit_date)
      DO UPDATE SET count = $3, updated_at = now()`,
-    [cameraId, date, clusters.length]
+    [cameraId, date, distinctCount]
   );
 
-  return clusters.length;
+  return distinctCount;
 }
 
 /**
  * Get visitor counts for a PDV (all cameras) over a date range.
+ * Uses DISTINCT person_id across all cameras in the PDV to avoid
+ * counting the same person seen by multiple cameras.
+ * Falls back to daily_visitors table sums when person_id data is unavailable.
  */
 export async function getVisitorsByPdv(pdvId, from, to) {
-  if (pdvId) {
-    const { rows } = await pool.query(
+  const cameraFilter = pdvId
+    ? 'c.pdv_id = $1'
+    : '1=1';
+  const params = pdvId ? [pdvId, from, to] : [from, to];
+  const fromIdx = pdvId ? '$2' : '$1';
+  const toIdx = pdvId ? '$3' : '$2';
+
+  // Count distinct persons across all cameras per day (cross-camera dedup)
+  const { rows } = await pool.query(
+    `SELECT
+       fe.detected_at::date AS visit_date,
+       COUNT(DISTINCT fe.person_id) AS total_visitors,
+       json_agg(DISTINCT jsonb_build_object(
+         'camera_id', fe.camera_id,
+         'camera_name', c.name,
+         'count', cam_counts.cam_count
+       )) AS by_camera
+     FROM face_embeddings fe
+     JOIN cameras c ON c.id = fe.camera_id
+     JOIN (
+       SELECT camera_id, detected_at::date AS d, COUNT(DISTINCT person_id) AS cam_count
+       FROM face_embeddings
+       WHERE person_id IS NOT NULL
+         AND detected_at::date >= ${fromIdx}
+         AND detected_at::date <= ${toIdx}
+       GROUP BY camera_id, detected_at::date
+     ) cam_counts ON cam_counts.camera_id = fe.camera_id AND cam_counts.d = fe.detected_at::date
+     WHERE ${cameraFilter}
+       AND fe.person_id IS NOT NULL
+       AND fe.detected_at::date >= ${fromIdx}
+       AND fe.detected_at::date <= ${toIdx}
+     GROUP BY fe.detected_at::date
+     ORDER BY fe.detected_at::date DESC`,
+    params
+  );
+
+  // If no person_id data, fall back to daily_visitors table (legacy)
+  if (rows.length === 0) {
+    const { rows: fallback } = await pool.query(
       `SELECT dv.visit_date, SUM(dv.count) AS total_visitors,
               json_agg(json_build_object('camera_id', dv.camera_id, 'camera_name', c.name, 'count', dv.count)) AS by_camera
        FROM daily_visitors dv
        JOIN cameras c ON c.id = dv.camera_id
-       WHERE c.pdv_id = $1
-         AND dv.visit_date >= $2
-         AND dv.visit_date <= $3
+       WHERE ${cameraFilter}
+         AND dv.visit_date >= ${fromIdx}
+         AND dv.visit_date <= ${toIdx}
        GROUP BY dv.visit_date
        ORDER BY dv.visit_date DESC`,
-      [pdvId, from, to]
+      params
     );
-    return rows;
+    return fallback;
   }
-  // All PDVs
-  const { rows } = await pool.query(
-    `SELECT dv.visit_date, SUM(dv.count) AS total_visitors,
-            json_agg(json_build_object('camera_id', dv.camera_id, 'camera_name', c.name, 'count', dv.count)) AS by_camera
-     FROM daily_visitors dv
-     JOIN cameras c ON c.id = dv.camera_id
-     WHERE dv.visit_date >= $1
-       AND dv.visit_date <= $2
-     GROUP BY dv.visit_date
-     ORDER BY dv.visit_date DESC`,
-    [from, to]
-  );
+
   return rows;
 }
 

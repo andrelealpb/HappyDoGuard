@@ -3,8 +3,6 @@ set -e
 
 DEPLOY_DIR="/opt/HappyDoGuard"
 STATUS_FILE="$DEPLOY_DIR/deploy-status.json"
-# Also write to repo root for docker-compose volume mount
-REPO_STATUS_FILE="$DEPLOY_DIR/deploy-status.json"
 LOG_PREFIX="[deploy]"
 STARTED_AT=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 
@@ -25,38 +23,75 @@ COMMIT_HASH=$(git rev-parse --short HEAD)
 COMMIT_MSG=$(git log -1 --pretty=%s)
 COMMIT_AUTHOR=$(git log -1 --pretty=%an)
 
-# Rebuild and restart containers (pass git info as build args)
-echo "$LOG_PREFIX Building and restarting containers..."
+# Build each service individually to capture per-service build status
 BUILD_TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-docker compose build \
-  --build-arg BUILD_COMMIT="$COMMIT_HASH" \
-  --build-arg BUILD_BRANCH="$BRANCH" \
-  --build-arg BUILD_TIMESTAMP="$BUILD_TIMESTAMP" \
-  --build-arg BUILD_AUTHOR="$COMMIT_AUTHOR" \
-  --build-arg BUILD_MESSAGE="$COMMIT_MSG" \
-  api
+BUILD_ARGS="--build-arg BUILD_COMMIT=$COMMIT_HASH --build-arg BUILD_BRANCH=$BRANCH --build-arg BUILD_TIMESTAMP=$BUILD_TIMESTAMP --build-arg BUILD_AUTHOR=$COMMIT_AUTHOR --build-arg BUILD_MESSAGE=$COMMIT_MSG"
+
+SERVICES="dashboard api face-service nginx-rtmp"
+BUILD_RESULTS=""
+
+for SERVICE in $SERVICES; do
+  echo "$LOG_PREFIX Building $SERVICE..."
+  SERVICE_BUILD_START=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+  if docker compose build $BUILD_ARGS "$SERVICE" 2>&1; then
+    SERVICE_BUILD_STATUS="success"
+    echo "$LOG_PREFIX $SERVICE build: OK"
+  else
+    SERVICE_BUILD_STATUS="error"
+    echo "$LOG_PREFIX $SERVICE build: FAILED"
+  fi
+  SERVICE_BUILD_END=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+  if [ -n "$BUILD_RESULTS" ]; then BUILD_RESULTS="$BUILD_RESULTS,"; fi
+  BUILD_RESULTS="$BUILD_RESULTS{\"name\":\"$SERVICE\",\"build_status\":\"$SERVICE_BUILD_STATUS\",\"build_started_at\":\"$SERVICE_BUILD_START\",\"build_finished_at\":\"$SERVICE_BUILD_END\"}"
+done
+
+echo "$LOG_PREFIX Restarting containers..."
 docker compose up -d --remove-orphans
 
-# Wait for health checks
+# Wait for services to start
 echo "$LOG_PREFIX Waiting for services..."
-sleep 10
+sleep 15
 
-# Check health
-API_HEALTH=$(curl -sf http://localhost:8000/health || echo '{"status":"error"}')
-RTMP_HEALTH=$(curl -sf http://localhost:8080/health || echo '{"status":"error"}')
+# Check health of each service and get container status
+API_HEALTH=$(curl -sf http://localhost:8000/health 2>/dev/null || echo '{"status":"error"}')
+RTMP_HEALTH=$(curl -sf http://localhost:8080/health 2>/dev/null || echo '{"status":"error"}')
+FACE_HEALTH=$(curl -sf http://localhost:8001/health 2>/dev/null || echo '{"status":"error"}')
 
 echo "$LOG_PREFIX API:  $API_HEALTH"
 echo "$LOG_PREFIX RTMP: $RTMP_HEALTH"
+echo "$LOG_PREFIX Face: $FACE_HEALTH"
+
+# Get container status for all services via docker compose
+CONTAINER_STATUSES=""
+for SERVICE in $SERVICES db; do
+  CONTAINER_STATE=$(docker compose ps --format json "$SERVICE" 2>/dev/null | head -1)
+  if [ -n "$CONTAINER_STATE" ]; then
+    C_STATUS=$(echo "$CONTAINER_STATE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('State','unknown'))" 2>/dev/null || echo "unknown")
+    C_HEALTH_RAW=$(echo "$CONTAINER_STATE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('Health',''))" 2>/dev/null || echo "")
+  else
+    C_STATUS="not_found"
+    C_HEALTH_RAW=""
+  fi
+
+  if [ -n "$CONTAINER_STATUSES" ]; then CONTAINER_STATUSES="$CONTAINER_STATUSES,"; fi
+  CONTAINER_STATUSES="$CONTAINER_STATUSES{\"name\":\"$SERVICE\",\"state\":\"$C_STATUS\",\"health\":\"$C_HEALTH_RAW\"}"
+done
+
+# Determine API health status values
+API_OK=$(echo "$API_HEALTH" | grep -q '"ok"' && echo "true" || echo "false")
+RTMP_OK=$(echo "$RTMP_HEALTH" | grep -q '"ok"' && echo "true" || echo "false")
+FACE_OK=$(echo "$FACE_HEALTH" | grep -q '"ok"' && echo "true" || echo "false")
 
 # Determine overall status
 FINISHED_AT=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-if echo "$API_HEALTH" | grep -q '"ok"' && echo "$RTMP_HEALTH" | grep -q '"ok"'; then
+if [ "$API_OK" = "true" ] && [ "$RTMP_OK" = "true" ] && [ "$FACE_OK" = "true" ]; then
   DEPLOY_STATUS="success"
 else
   DEPLOY_STATUS="degraded"
 fi
 
-# Write final status file
+# Write final status file with build and service details
 cat > "$STATUS_FILE" <<STATUSEOF
 {
   "status": "$DEPLOY_STATUS",
@@ -65,7 +100,17 @@ cat > "$STATUS_FILE" <<STATUSEOF
   "commit_author": "$COMMIT_AUTHOR",
   "branch": "$BRANCH",
   "started_at": "$STARTED_AT",
-  "finished_at": "$FINISHED_AT"
+  "finished_at": "$FINISHED_AT",
+  "build": {
+    "timestamp": "$BUILD_TIMESTAMP",
+    "services": [$BUILD_RESULTS]
+  },
+  "services": {
+    "api": {"healthy": $API_OK, "response": $API_HEALTH},
+    "nginx_rtmp": {"healthy": $RTMP_OK, "response": $RTMP_HEALTH},
+    "face_service": {"healthy": $FACE_OK, "response": $FACE_HEALTH}
+  },
+  "containers": [$CONTAINER_STATUSES]
 }
 STATUSEOF
 
