@@ -26,31 +26,34 @@ COMMIT_MSG=$(git log -1 --pretty=%s)
 COMMIT_AUTHOR=$(git log -1 --pretty=%an)
 
 # Rebuild and restart containers (pass git info as build args)
-echo "$LOG_PREFIX Building and restarting containers..."
+echo "$LOG_PREFIX Building all containers..."
 BUILD_TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 docker compose build \
   --build-arg BUILD_COMMIT="$COMMIT_HASH" \
   --build-arg BUILD_BRANCH="$BRANCH" \
   --build-arg BUILD_TIMESTAMP="$BUILD_TIMESTAMP" \
   --build-arg BUILD_AUTHOR="$COMMIT_AUTHOR" \
-  --build-arg BUILD_MESSAGE="$COMMIT_MSG" \
-  api
+  --build-arg BUILD_MESSAGE="$COMMIT_MSG"
+
+echo "$LOG_PREFIX Restarting containers..."
 docker compose up -d --remove-orphans
 
 # Wait for health checks
 echo "$LOG_PREFIX Waiting for services..."
-sleep 10
+sleep 15
 
 # Check health
 API_HEALTH=$(curl -sf http://localhost:8000/health || echo '{"status":"error"}')
 RTMP_HEALTH=$(curl -sf http://localhost:8080/health || echo '{"status":"error"}')
+FACE_HEALTH=$(curl -sf http://localhost:8001/health || echo '{"status":"error"}')
 
 echo "$LOG_PREFIX API:  $API_HEALTH"
 echo "$LOG_PREFIX RTMP: $RTMP_HEALTH"
+echo "$LOG_PREFIX Face: $FACE_HEALTH"
 
 # Determine overall status
 FINISHED_AT=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-if echo "$API_HEALTH" | grep -q '"ok"' && echo "$RTMP_HEALTH" | grep -q '"ok"'; then
+if echo "$API_HEALTH" | grep -q '"ok"' && echo "$RTMP_HEALTH" | grep -q '"ok"' && echo "$FACE_HEALTH" | grep -q '"ok"'; then
   DEPLOY_STATUS="success"
 else
   DEPLOY_STATUS="degraded"
