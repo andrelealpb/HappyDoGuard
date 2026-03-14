@@ -24,7 +24,7 @@ const PORT = process.env.PORT || 8000;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '20mb' }));
 
 // Rate limiting: 100 req/min per IP/API Key
 const limiter = rateLimit({
