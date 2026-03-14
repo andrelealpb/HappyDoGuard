@@ -39,10 +39,10 @@ async def lifespan(app: FastAPI):
     face_app.prepare(ctx_id=0, det_size=(640, 640))
     logger.info(f"InsightFace model loaded in {time.time() - t0:.1f}s")
 
-    logger.info("Loading YOLOv8n model for person detection...")
+    logger.info("Loading YOLO26n model for person detection...")
     t1 = time.time()
-    yolo_model = YOLO("yolov8n.pt")
-    logger.info(f"YOLOv8n model loaded in {time.time() - t1:.1f}s")
+    yolo_model = YOLO("yolo26n.pt")
+    logger.info(f"YOLO26n model loaded in {time.time() - t1:.1f}s")
 
     yield
     logger.info("Shutting down face service")
@@ -152,7 +152,7 @@ async def embed_photo(file: UploadFile = File(...)):
 @app.post("/detect-persons")
 async def detect_persons(file: UploadFile = File(...)):
     """
-    Detect persons (full body) in an image using YOLOv8n.
+    Detect persons (full body) in an image using YOLO26n.
     Much more reliable than face-only detection for triggering recordings,
     as it detects people from any angle (back, side, far away).
 

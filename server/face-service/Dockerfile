@@ -15,8 +15,8 @@ RUN apt-get purge -y --auto-remove build-essential \
 # Pre-download InsightFace model at build time
 RUN python -c "from insightface.app import FaceAnalysis; FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'])" || true
 
-# Pre-download YOLOv8n model for person detection at build time
-RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')" || true
+# Pre-download YOLO26n model for person detection at build time
+RUN python -c "from ultralytics import YOLO; YOLO('yolo26n.pt')" || true
 
 COPY app.py .
 
