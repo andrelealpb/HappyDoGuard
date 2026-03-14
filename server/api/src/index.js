@@ -1,7 +1,9 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import rateLimit from 'express-rate-limit';
 
 import camerasRouter from './routes/cameras.js';
@@ -63,8 +65,53 @@ app.get('/health', async (_req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`HappyDo Guard API running on port ${PORT}`);
-});
+// Run pending migrations on startup
+async function runMigrations() {
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const migrationsDir = join(__dirname, 'db', 'migrations');
+
+  // Ensure migrations tracking table exists
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS _migrations (
+      name VARCHAR(255) PRIMARY KEY,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+
+  let files;
+  try {
+    files = readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
+  } catch {
+    return; // no migrations dir
+  }
+
+  for (const file of files) {
+    const { rows } = await pool.query('SELECT 1 FROM _migrations WHERE name = $1', [file]);
+    if (rows.length > 0) continue;
+
+    const sql = readFileSync(join(migrationsDir, file), 'utf-8');
+    try {
+      await pool.query(sql);
+      await pool.query('INSERT INTO _migrations (name) VALUES ($1)', [file]);
+      console.log(`Migration applied: ${file}`);
+    } catch (err) {
+      console.error(`Migration failed (${file}):`, err.message);
+    }
+  }
+}
+
+runMigrations()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`HappyDo Guard API running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error('Migration error:', err.message);
+    // Start anyway so the API is accessible
+    app.listen(PORT, () => {
+      console.log(`HappyDo Guard API running on port ${PORT} (migrations had errors)`);
+    });
+  });
 
 export default app;
