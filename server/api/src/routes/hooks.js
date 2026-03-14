@@ -28,8 +28,6 @@ router.get('/on-publish', async (req, res) => {
       camera.recording_mode = 'continuous';
     }
 
-    const camera = rows[0];
-
     // Update camera status to online
     await pool.query(
       `UPDATE cameras SET status = 'online', last_seen_at = now(), updated_at = now()
