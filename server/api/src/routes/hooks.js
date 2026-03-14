@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { existsSync, statSync } from 'fs';
 import { pool } from '../db/pool.js';
 import { onCameraOnline, onCameraOffline } from '../services/motion-detector.js';
 import { startContinuousRecording, stopRecording } from '../services/recorder.js';
@@ -112,10 +113,17 @@ router.get('/on-record-done', async (req, res) => {
     );
 
     if (cameras.length > 0) {
+      let fileSize = null;
+      try {
+        if (filePath && existsSync(filePath)) {
+          fileSize = statSync(filePath).size;
+        }
+      } catch { /* ignore */ }
+
       await pool.query(
-        `INSERT INTO recordings (camera_id, file_path, started_at, recording_type)
-         VALUES ($1, $2, now(), 'continuous')`,
-        [cameras[0].id, filePath]
+        `INSERT INTO recordings (camera_id, file_path, file_size, started_at, ended_at, recording_type)
+         VALUES ($1, $2, $3, now(), now(), 'continuous')`,
+        [cameras[0].id, filePath, fileSize]
       );
     }
 
