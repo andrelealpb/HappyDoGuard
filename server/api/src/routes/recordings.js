@@ -131,6 +131,58 @@ router.get('/:id/stream', authenticate, async (req, res) => {
   }
 });
 
+// GET /api/recordings/:id/thumbnail — Serve or generate a thumbnail image for a recording
+router.get('/:id/thumbnail', authenticate, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT file_path, thumbnail_path FROM recordings WHERE id = $1',
+      [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Recording not found' });
+
+    const { file_path, thumbnail_path } = rows[0];
+
+    // If thumbnail exists on disk, serve it
+    if (thumbnail_path && existsSync(thumbnail_path)) {
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Content-Disposition', `attachment; filename="thumb-${req.params.id}.jpg"`);
+      return createReadStream(thumbnail_path).pipe(res);
+    }
+
+    // Generate thumbnail on-the-fly from the video file using ffmpeg
+    if (!file_path || !existsSync(file_path)) {
+      return res.status(404).json({ error: 'Recording file not found' });
+    }
+
+    const { spawn } = await import('child_process');
+    const ffmpeg = spawn('ffmpeg', [
+      '-i', file_path,
+      '-frames:v', '1',
+      '-vf', 'scale=640:-1',
+      '-f', 'image2',
+      '-c:v', 'mjpeg',
+      '-q:v', '3',
+      '-loglevel', 'error',
+      'pipe:1',
+    ]);
+
+    const chunks = [];
+    ffmpeg.stdout.on('data', (chunk) => chunks.push(chunk));
+    ffmpeg.on('close', (code) => {
+      if (code !== 0 || chunks.length === 0) {
+        return res.status(500).json({ error: 'Failed to generate thumbnail' });
+      }
+      const buf = Buffer.concat(chunks);
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Content-Disposition', `attachment; filename="thumb-${req.params.id}.jpg"`);
+      res.send(buf);
+    });
+    ffmpeg.on('error', () => res.status(500).json({ error: 'FFmpeg not available' }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/recordings/cleanup — Run cleanup for all cameras (admin only)
 router.post('/cleanup', authenticate, authorize('admin'), async (_req, res) => {
   try {

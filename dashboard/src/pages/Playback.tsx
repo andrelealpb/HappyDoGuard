@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 interface Camera {
@@ -272,6 +273,10 @@ function VideoPlayer({
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.15rem" }}>
+          <a href={`/api/recordings/${recording.id}/thumbnail?token=${encodeURIComponent(token)}`}
+            download={`thumb-${recording.id}.jpg`}
+            title="Baixar imagem"
+            style={{ ...cb, textDecoration: "none", color: "#fff" }}>&#128247;</a>
           <button onClick={() => { setMuted(!muted); if (videoRef.current) videoRef.current.muted = !muted; }} style={cb}>
             {muted ? "\uD83D\uDD07" : "\uD83D\uDD0A"}
           </button>
@@ -284,8 +289,8 @@ function VideoPlayer({
 
 // ─── Recording List ───
 
-function RecordingList({ recordings, selectedRecording, onSelect }: {
-  recordings: Recording[]; selectedRecording: Recording | null; onSelect: (r: Recording) => void;
+function RecordingList({ recordings, selectedRecording, onSelect, token }: {
+  recordings: Recording[]; selectedRecording: Recording | null; onSelect: (r: Recording) => void; token: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -320,6 +325,15 @@ function RecordingList({ recordings, selectedRecording, onSelect }: {
                 {r.file_size ? <span>{formatBytes(r.file_size)}</span> : null}
               </div>
             </div>
+            <a href={`/api/recordings/${r.id}/thumbnail?token=${encodeURIComponent(token)}`}
+              onClick={(e) => e.stopPropagation()}
+              download={`thumb-${r.id}.jpg`}
+              title="Baixar imagem"
+              style={{ flexShrink: 0, padding: "0.2rem 0.35rem", borderRadius: "3px", background: "#f5f5f5",
+                border: "1px solid #ddd", cursor: "pointer", fontSize: "0.75rem", color: "#555", textDecoration: "none",
+                display: "flex", alignItems: "center" }}>
+              &#128247;
+            </a>
           </div>
         );
       })}
@@ -331,6 +345,7 @@ function RecordingList({ recordings, selectedRecording, onSelect }: {
 
 function Playback() {
   const { apiFetch, token } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState("");
   const [selectedDate, setSelectedDate] = useState(dateToYMD(new Date()));
@@ -338,11 +353,33 @@ function Playback() {
   const [selectedRecording, setSelectedRecording] = useState<Recording | null>(null);
   const [loading, setLoading] = useState(false);
   const [searchTimestamp, setSearchTimestamp] = useState("");
+  const deepLinkHandled = useRef(false);
 
   useEffect(() => {
     apiFetch("/api/cameras").then((r) => r.json()).then((cams: Camera[]) => {
       setCameras(cams);
-      if (cams.length > 0 && !selectedCameraId) setSelectedCameraId(cams[0].id);
+      // Check for deep-link query params (e.g. from face search)
+      const qCameraId = searchParams.get("camera_id");
+      const qTimestamp = searchParams.get("timestamp");
+      if (qCameraId && qTimestamp && !deepLinkHandled.current) {
+        deepLinkHandled.current = true;
+        setSelectedCameraId(qCameraId);
+        const ts = new Date(qTimestamp);
+        setSelectedDate(dateToYMD(ts));
+        // Clear query params from URL
+        setSearchParams({}, { replace: true });
+        // Find the recording that contains this timestamp
+        apiFetch(`/api/cameras/${qCameraId}/recording?timestamp=${encodeURIComponent(qTimestamp)}`)
+          .then((r) => r.json())
+          .then((rec) => {
+            if (rec && !rec.error) {
+              setSelectedRecording(rec);
+            }
+          })
+          .catch(console.error);
+      } else if (cams.length > 0 && !selectedCameraId && !qCameraId) {
+        setSelectedCameraId(cams[0].id);
+      }
     }).catch(console.error);
   }, []);
 
@@ -443,7 +480,7 @@ function Playback() {
               <div style={{ fontSize: "0.7rem", fontWeight: 600, color: "#333", padding: "0.2rem 0.4rem 0.35rem", borderBottom: "1px solid #eee", marginBottom: "0.35rem" }}>
                 {formatDate(displayDate)} — {selectedCamera?.name}
               </div>
-              <RecordingList recordings={recordings} selectedRecording={selectedRecording} onSelect={setSelectedRecording} />
+              <RecordingList recordings={recordings} selectedRecording={selectedRecording} onSelect={setSelectedRecording} token={token || ""} />
             </div>
           )}
         </div>
