@@ -7,17 +7,37 @@ interface PulseConfig {
   has_password: boolean;
 }
 
+interface DeployStatus {
+  status: string;
+  commit?: string;
+  commit_message?: string;
+  commit_author?: string;
+  branch?: string;
+  started_at?: string;
+  finished_at?: string;
+  message?: string;
+}
+
 function Settings() {
   const { apiFetch, user } = useAuth();
   const isAdmin = user?.role === "admin";
 
   const [pulse, setPulse] = useState<PulseConfig | null>(null);
+  const [deploy, setDeploy] = useState<DeployStatus | null>(null);
   const [form, setForm] = useState({ api_url: "", email: "", password: "" });
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [message, setMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
 
+  const loadDeploy = () => {
+    apiFetch("/api/deploy-status")
+      .then((r) => r.json())
+      .then(setDeploy)
+      .catch(console.error);
+  };
+
   useEffect(() => {
+    loadDeploy();
     if (!isAdmin) return;
     apiFetch("/api/settings/pulse")
       .then((r) => r.json())
@@ -198,6 +218,84 @@ function Settings() {
           </form>
         </div>
       )}
+
+      {/* Deploy Status */}
+      <div style={cardStyle}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h3 style={{ marginTop: 0, marginBottom: 0 }}>Status do Deploy</h3>
+          <button onClick={loadDeploy} style={{ ...btnStyle, fontSize: "0.75rem" }}>
+            Atualizar
+          </button>
+        </div>
+        {deploy ? (
+          <table style={{ width: "100%", fontSize: "0.875rem", marginTop: "0.75rem" }}>
+            <tbody>
+              <tr>
+                <td style={{ padding: "0.4rem 0", fontWeight: 600, width: "120px" }}>Status</td>
+                <td>
+                  <span
+                    style={{
+                      padding: "0.15rem 0.5rem",
+                      borderRadius: "4px",
+                      fontSize: "0.8rem",
+                      fontWeight: 600,
+                      background:
+                        deploy.status === "success" ? "#e8f5e9"
+                        : deploy.status === "deploying" ? "#fff3e0"
+                        : deploy.status === "degraded" ? "#ffebee"
+                        : "#f5f5f5",
+                      color:
+                        deploy.status === "success" ? "#2e7d32"
+                        : deploy.status === "deploying" ? "#e65100"
+                        : deploy.status === "degraded" ? "#c62828"
+                        : "#666",
+                    }}
+                  >
+                    {deploy.status === "success" ? "OK" : deploy.status === "deploying" ? "Deployando..." : deploy.status === "degraded" ? "Degradado" : deploy.status}
+                  </span>
+                </td>
+              </tr>
+              {deploy.commit && (
+                <tr>
+                  <td style={{ padding: "0.4rem 0", fontWeight: 600 }}>Commit</td>
+                  <td>
+                    <code style={{ fontSize: "0.8rem", background: "#f5f5f5", padding: "0.1rem 0.4rem", borderRadius: "3px" }}>
+                      {deploy.commit}
+                    </code>
+                    {" "}<span style={{ color: "#666" }}>{deploy.commit_message}</span>
+                  </td>
+                </tr>
+              )}
+              {deploy.commit_author && (
+                <tr>
+                  <td style={{ padding: "0.4rem 0", fontWeight: 600 }}>Autor</td>
+                  <td>{deploy.commit_author}</td>
+                </tr>
+              )}
+              {deploy.branch && (
+                <tr>
+                  <td style={{ padding: "0.4rem 0", fontWeight: 600 }}>Branch</td>
+                  <td><code style={{ fontSize: "0.8rem" }}>{deploy.branch}</code></td>
+                </tr>
+              )}
+              {deploy.finished_at && (
+                <tr>
+                  <td style={{ padding: "0.4rem 0", fontWeight: 600 }}>Quando</td>
+                  <td>{new Date(deploy.finished_at).toLocaleString("pt-BR")}</td>
+                </tr>
+              )}
+              {deploy.message && (
+                <tr>
+                  <td style={{ padding: "0.4rem 0", fontWeight: 600 }}>Info</td>
+                  <td style={{ color: "#666" }}>{deploy.message}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        ) : (
+          <p style={{ fontSize: "0.875rem", color: "#666" }}>Carregando...</p>
+        )}
+      </div>
 
       {/* RTMP Info */}
       <div style={cardStyle}>
