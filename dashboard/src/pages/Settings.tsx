@@ -7,6 +7,24 @@ interface PulseConfig {
   has_password: boolean;
 }
 
+interface BuildServiceInfo {
+  name: string;
+  build_status: string;
+  build_started_at?: string;
+  build_finished_at?: string;
+}
+
+interface ContainerInfo {
+  name: string;
+  state: string;
+  health?: string;
+}
+
+interface ServiceHealth {
+  healthy: boolean;
+  response?: Record<string, unknown>;
+}
+
 interface DeployStatus {
   status: string;
   commit?: string;
@@ -17,6 +35,16 @@ interface DeployStatus {
   finished_at?: string;
   built_at?: string;
   message?: string;
+  build?: {
+    timestamp: string;
+    services: BuildServiceInfo[];
+  };
+  services?: {
+    api?: ServiceHealth;
+    nginx_rtmp?: ServiceHealth;
+    face_service?: ServiceHealth;
+  };
+  containers?: ContainerInfo[];
 }
 
 function Settings() {
@@ -263,70 +291,168 @@ function Settings() {
           </button>
         </div>
         {deploy ? (
-          <table style={{ width: "100%", fontSize: "0.875rem", marginTop: "0.75rem" }}>
-            <tbody>
-              <tr>
-                <td style={{ padding: "0.4rem 0", fontWeight: 600, width: "120px" }}>Status</td>
-                <td>
-                  <span
-                    style={{
-                      padding: "0.15rem 0.5rem",
-                      borderRadius: "4px",
-                      fontSize: "0.8rem",
-                      fontWeight: 600,
-                      background:
-                        deploy.status === "success" || deploy.status === "ok" ? "#e8f5e9"
-                        : deploy.status === "deploying" ? "#fff3e0"
-                        : deploy.status === "degraded" ? "#ffebee"
-                        : "#f5f5f5",
-                      color:
-                        deploy.status === "success" || deploy.status === "ok" ? "#2e7d32"
-                        : deploy.status === "deploying" ? "#e65100"
-                        : deploy.status === "degraded" ? "#c62828"
-                        : "#666",
-                    }}
-                  >
-                    {deploy.status === "success" || deploy.status === "ok" ? "OK" : deploy.status === "deploying" ? "Deployando..." : deploy.status === "degraded" ? "Degradado" : deploy.status}
-                  </span>
-                </td>
-              </tr>
-              {deploy.commit && (
+          <>
+            <table style={{ width: "100%", fontSize: "0.875rem", marginTop: "0.75rem" }}>
+              <tbody>
                 <tr>
-                  <td style={{ padding: "0.4rem 0", fontWeight: 600 }}>Commit</td>
+                  <td style={{ padding: "0.4rem 0", fontWeight: 600, width: "120px" }}>Status</td>
                   <td>
-                    <code style={{ fontSize: "0.8rem", background: "#f5f5f5", padding: "0.1rem 0.4rem", borderRadius: "3px" }}>
-                      {deploy.commit}
-                    </code>
-                    {" "}<span style={{ color: "#666" }}>{deploy.commit_message}</span>
+                    <span
+                      style={{
+                        padding: "0.15rem 0.5rem",
+                        borderRadius: "4px",
+                        fontSize: "0.8rem",
+                        fontWeight: 600,
+                        background:
+                          deploy.status === "success" || deploy.status === "ok" ? "#e8f5e9"
+                          : deploy.status === "deploying" ? "#fff3e0"
+                          : deploy.status === "degraded" ? "#ffebee"
+                          : "#f5f5f5",
+                        color:
+                          deploy.status === "success" || deploy.status === "ok" ? "#2e7d32"
+                          : deploy.status === "deploying" ? "#e65100"
+                          : deploy.status === "degraded" ? "#c62828"
+                          : "#666",
+                      }}
+                    >
+                      {deploy.status === "success" || deploy.status === "ok" ? "OK" : deploy.status === "deploying" ? "Deployando..." : deploy.status === "degraded" ? "Degradado" : deploy.status}
+                    </span>
                   </td>
                 </tr>
-              )}
-              {deploy.commit_author && (
-                <tr>
-                  <td style={{ padding: "0.4rem 0", fontWeight: 600 }}>Autor</td>
-                  <td>{deploy.commit_author}</td>
-                </tr>
-              )}
-              {deploy.branch && (
-                <tr>
-                  <td style={{ padding: "0.4rem 0", fontWeight: 600 }}>Branch</td>
-                  <td><code style={{ fontSize: "0.8rem" }}>{deploy.branch}</code></td>
-                </tr>
-              )}
-              {(deploy.finished_at || deploy.built_at) && (
-                <tr>
-                  <td style={{ padding: "0.4rem 0", fontWeight: 600 }}>Quando</td>
-                  <td>{new Date(deploy.finished_at || deploy.built_at!).toLocaleString("pt-BR")}</td>
-                </tr>
-              )}
-              {deploy.message && (
-                <tr>
-                  <td style={{ padding: "0.4rem 0", fontWeight: 600 }}>Info</td>
-                  <td style={{ color: "#666" }}>{deploy.message}</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                {deploy.commit && (
+                  <tr>
+                    <td style={{ padding: "0.4rem 0", fontWeight: 600 }}>Commit</td>
+                    <td>
+                      <code style={{ fontSize: "0.8rem", background: "#f5f5f5", padding: "0.1rem 0.4rem", borderRadius: "3px" }}>
+                        {deploy.commit}
+                      </code>
+                      {" "}<span style={{ color: "#666" }}>{deploy.commit_message}</span>
+                    </td>
+                  </tr>
+                )}
+                {deploy.commit_author && (
+                  <tr>
+                    <td style={{ padding: "0.4rem 0", fontWeight: 600 }}>Autor</td>
+                    <td>{deploy.commit_author}</td>
+                  </tr>
+                )}
+                {deploy.branch && (
+                  <tr>
+                    <td style={{ padding: "0.4rem 0", fontWeight: 600 }}>Branch</td>
+                    <td><code style={{ fontSize: "0.8rem" }}>{deploy.branch}</code></td>
+                  </tr>
+                )}
+                {(deploy.finished_at || deploy.built_at) && (
+                  <tr>
+                    <td style={{ padding: "0.4rem 0", fontWeight: 600 }}>Quando</td>
+                    <td>{new Date(deploy.finished_at || deploy.built_at!).toLocaleString("pt-BR")}</td>
+                  </tr>
+                )}
+                {deploy.message && (
+                  <tr>
+                    <td style={{ padding: "0.4rem 0", fontWeight: 600 }}>Info</td>
+                    <td style={{ color: "#666" }}>{deploy.message}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+
+            {/* Build Status per Service */}
+            {deploy.build?.services && deploy.build.services.length > 0 && (
+              <div style={{ marginTop: "1rem" }}>
+                <h4 style={{ margin: "0 0 0.5rem 0", fontSize: "0.85rem" }}>Build</h4>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "0.5rem" }}>
+                  {deploy.build.services.map((svc) => (
+                    <div
+                      key={svc.name}
+                      style={{
+                        padding: "0.5rem 0.75rem",
+                        borderRadius: "6px",
+                        border: "1px solid",
+                        borderColor: svc.build_status === "success" ? "#c8e6c9" : "#ffcdd2",
+                        background: svc.build_status === "success" ? "#f1f8e9" : "#fce4ec",
+                      }}
+                    >
+                      <div style={{ fontSize: "0.8rem", fontWeight: 600 }}>{svc.name}</div>
+                      <div style={{
+                        fontSize: "0.75rem",
+                        color: svc.build_status === "success" ? "#2e7d32" : "#c62828",
+                        fontWeight: 600,
+                      }}>
+                        {svc.build_status === "success" ? "Build OK" : "Build falhou"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Service Health Status */}
+            {deploy.services && (
+              <div style={{ marginTop: "1rem" }}>
+                <h4 style={{ margin: "0 0 0.5rem 0", fontSize: "0.85rem" }}>Saúde dos Serviços</h4>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "0.5rem" }}>
+                  {Object.entries(deploy.services).map(([key, svc]) => {
+                    const name = key === "api" ? "API" : key === "nginx_rtmp" ? "RTMP" : key === "face_service" ? "Face Service" : key;
+                    return (
+                      <div
+                        key={key}
+                        style={{
+                          padding: "0.5rem 0.75rem",
+                          borderRadius: "6px",
+                          border: "1px solid",
+                          borderColor: svc.healthy ? "#c8e6c9" : "#ffcdd2",
+                          background: svc.healthy ? "#f1f8e9" : "#fce4ec",
+                        }}
+                      >
+                        <div style={{ fontSize: "0.8rem", fontWeight: 600 }}>{name}</div>
+                        <div style={{
+                          fontSize: "0.75rem",
+                          color: svc.healthy ? "#2e7d32" : "#c62828",
+                          fontWeight: 600,
+                        }}>
+                          {svc.healthy ? "Saudável" : "Com erro"}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Container Status */}
+            {deploy.containers && deploy.containers.length > 0 && (
+              <div style={{ marginTop: "1rem" }}>
+                <h4 style={{ margin: "0 0 0.5rem 0", fontSize: "0.85rem" }}>Containers Docker</h4>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: "0.5rem" }}>
+                  {deploy.containers.map((c) => {
+                    const isRunning = c.state === "running";
+                    return (
+                      <div
+                        key={c.name}
+                        style={{
+                          padding: "0.5rem 0.75rem",
+                          borderRadius: "6px",
+                          border: "1px solid",
+                          borderColor: isRunning ? "#c8e6c9" : "#ffcdd2",
+                          background: isRunning ? "#f1f8e9" : "#fce4ec",
+                        }}
+                      >
+                        <div style={{ fontSize: "0.8rem", fontWeight: 600 }}>{c.name}</div>
+                        <div style={{
+                          fontSize: "0.75rem",
+                          color: isRunning ? "#2e7d32" : "#c62828",
+                          fontWeight: 600,
+                        }}>
+                          {isRunning ? "Rodando" : c.state === "not_found" ? "Não encontrado" : c.state}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <p style={{ fontSize: "0.875rem", color: "#666" }}>Carregando...</p>
         )}
