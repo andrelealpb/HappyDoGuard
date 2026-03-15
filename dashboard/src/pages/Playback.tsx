@@ -636,7 +636,8 @@ function Playback() {
   useEffect(() => {
     if (!selectedCameraId || !selectedDate) return;
     setLoading(true); setSelectedRecording(null);
-    apiFetch(`/api/recordings/by-day?camera_id=${selectedCameraId}&date=${selectedDate}`)
+    const tzOffset = new Date().getTimezoneOffset();
+    apiFetch(`/api/recordings/by-day?camera_id=${selectedCameraId}&date=${selectedDate}&tz_offset=${tzOffset}`)
       .then((r) => r.json()).then((data: Recording[]) => { setRecordings(data); setLoading(false); })
       .catch(() => { setRecordings([]); setLoading(false); });
   }, [selectedCameraId, selectedDate]);
