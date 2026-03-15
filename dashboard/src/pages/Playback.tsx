@@ -199,11 +199,12 @@ function Timeline({
 // ─── Video Player with Face Detection Overlay ───
 
 function VideoPlayer({
-  recording, recordings, onSelectRecording, token, apiFetch, onFaceClick,
+  recording, recordings, onSelectRecording, token, apiFetch, onFaceClick, cameraName, pdvName,
 }: {
   recording: Recording; recordings: Recording[]; onSelectRecording: (r: Recording) => void; token: string;
   apiFetch: (url: string, init?: RequestInit) => Promise<Response>;
   onFaceClick: (embedding: number[]) => void;
+  cameraName: string; pdvName: string;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -415,6 +416,18 @@ function VideoPlayer({
   const currentTsStr = `${String(curH).padStart(2, "0")}:${String(curM).padStart(2, "0")}:${String(curS).padStart(2, "0")}`;
   const speeds: PlaybackSpeed[] = [0.5, 1, 2, 4];
 
+  // Build download filename: AAAAMMDDHHMMSS-CAMERA-LOJA.mp4
+  const buildDownloadName = () => {
+    const t = parseLocalTime(recording.started_at);
+    // Extract date part (YYYY-MM-DD) from the raw PG string
+    const dateMatch = recording.started_at.match(/(\d{4})-(\d{2})-(\d{2})/);
+    const [y, mo, d] = dateMatch ? [dateMatch[1], dateMatch[2], dateMatch[3]] : ["0000", "00", "00"];
+    const ts = `${y}${mo}${d}${String(t.h).padStart(2, "0")}${String(t.m).padStart(2, "0")}${String(t.s).padStart(2, "0")}`;
+    const cam = cameraName.replace(/[^a-zA-Z0-9À-ú ]/g, "").replace(/\s+/g, "-");
+    const pdv = pdvName.replace(/[^a-zA-Z0-9À-ú ]/g, "").replace(/\s+/g, "-");
+    return `${ts}-${cam}-${pdv}.mp4`;
+  };
+
   const cb: React.CSSProperties = { background: "none", border: "none", color: "#fff", cursor: "pointer", padding: "0.25rem 0.35rem", fontSize: "0.95rem", lineHeight: 1, opacity: 0.85 };
 
   return (
@@ -521,11 +534,11 @@ function VideoPlayer({
             &#128065;
           </button>
           <a href={`/api/recordings/${recording.id}/thumbnail?token=${encodeURIComponent(token)}`}
-            download={`thumb-${recording.id}.jpg`}
+            download={buildDownloadName().replace('.mp4', '.jpg')}
             title="Baixar imagem (snapshot)"
             style={{ ...cb, textDecoration: "none", color: "#fff" }}>&#128247;</a>
           <a href={`/api/recordings/${recording.id}/stream?token=${encodeURIComponent(token)}&download=1`}
-            download
+            download={buildDownloadName()}
             title="Baixar vídeo"
             style={{ ...cb, textDecoration: "none", color: "#fff" }}>&#11015;</a>
           <button onClick={() => { setMuted(!muted); if (videoRef.current) videoRef.current.muted = !muted; }} style={cb}>
@@ -752,7 +765,8 @@ function Playback() {
           <div>
             {selectedRecording && token ? (
               <VideoPlayer recording={selectedRecording} recordings={recordings} onSelectRecording={setSelectedRecording}
-                token={token} apiFetch={apiFetch} onFaceClick={handleFaceClick} />
+                token={token} apiFetch={apiFetch} onFaceClick={handleFaceClick}
+                cameraName={selectedCamera?.name || ""} pdvName={selectedCamera?.pdv_name || ""} />
             ) : (
               <div style={{ background: "#000", borderRadius: "6px", aspectRatio: "16/9", display: "flex", alignItems: "center", justifyContent: "center",
                 color: "#666", fontSize: "0.85rem", maxHeight: "75vh" }}>
