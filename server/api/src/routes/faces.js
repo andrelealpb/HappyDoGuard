@@ -348,6 +348,7 @@ const FACE_SERVICE_URL = process.env.FACE_SERVICE_URL || 'http://face-service:80
 const VISITOR_THRESHOLD = 0.65;
 
 let reimportRunning = false;
+let reimportProgress = { imported: 0, skipped: 0, errors: 0, total: 0, done: false };
 
 router.post('/reimport', authenticate, authorize('admin'), async (_req, res) => {
   if (reimportRunning) {
@@ -379,6 +380,7 @@ router.post('/reimport', authenticate, authorize('admin'), async (_req, res) => 
     res.json({ message: `Reimportação iniciada para ${files.length} crops. Acompanhe os logs do servidor.`, total_files: files.length });
 
     let imported = 0, skipped = 0, errors = 0;
+    reimportProgress = { imported: 0, skipped: 0, errors: 0, total: files.length, done: false };
     console.log(`[reimport] Starting reimport of ${files.length} face crops...`);
 
     for (let i = 0; i < files.length; i++) {
@@ -412,8 +414,8 @@ router.post('/reimport', authenticate, authorize('admin'), async (_req, res) => 
         // Find which camera had a recording at this timestamp
         const { rows: recMatch } = await pool.query(
           `SELECT camera_id FROM recordings
-           WHERE start_time <= $1 AND end_time >= $1
-           ORDER BY start_time DESC LIMIT 1`,
+           WHERE started_at <= $1 AND (ended_at >= $1 OR ended_at IS NULL)
+           ORDER BY started_at DESC LIMIT 1`,
           [detectedAt]
         );
         const cameraId = recMatch.length > 0 ? recMatch[0].camera_id : cameras[0].id;
@@ -448,7 +450,8 @@ router.post('/reimport', authenticate, authorize('admin'), async (_req, res) => 
         );
 
         imported++;
-        if (imported % 50 === 0) {
+        reimportProgress = { imported, skipped, errors, total: files.length, done: false };
+        if (imported % 10 === 0) {
           console.log(`[reimport] Progress: ${imported} imported, ${skipped} skipped, ${errors} errors (${i + 1}/${files.length})`);
         }
       } catch (err) {
@@ -457,18 +460,20 @@ router.post('/reimport', authenticate, authorize('admin'), async (_req, res) => 
       }
     }
 
+    reimportProgress = { imported, skipped, errors, total: files.length, done: true };
     console.log(`[reimport] Complete: ${imported} imported, ${skipped} skipped, ${errors} errors out of ${files.length} files`);
     reimportRunning = false;
   } catch (err) {
     console.error('[reimport] Fatal error:', err);
+    reimportProgress = { ...reimportProgress, done: true };
     reimportRunning = false;
   }
 });
 
-// GET /api/faces/reimport/status — Check if reimport is running
+// GET /api/faces/reimport/status — Check reimport progress
 router.get('/reimport/status', authenticate, async (_req, res) => {
   const { rows } = await pool.query('SELECT count(*) AS total FROM face_embeddings');
-  res.json({ running: reimportRunning, total_embeddings: parseInt(rows[0].total, 10) });
+  res.json({ running: reimportRunning, total_embeddings: parseInt(rows[0].total, 10), progress: reimportProgress });
 });
 
 export default router;

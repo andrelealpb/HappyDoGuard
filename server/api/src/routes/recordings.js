@@ -106,7 +106,7 @@ router.get('/:id/stream', authenticate, async (req, res) => {
     const fileSize = stat.size;
     const range = req.headers.range;
     const disposition = req.query.download === '1' ? 'attachment' : 'inline';
-    const fname = basename(filePath);
+    const fname = req.query.filename || basename(filePath);
 
     if (range && disposition !== 'attachment') {
       // Partial content (range request for seeking)
@@ -150,7 +150,7 @@ router.get('/:id/thumbnail', authenticate, async (req, res) => {
     // If thumbnail exists on disk, serve it
     if (thumbnail_path && existsSync(thumbnail_path)) {
       res.setHeader('Content-Type', 'image/jpeg');
-      res.setHeader('Content-Disposition', `attachment; filename="thumb-${req.params.id}.jpg"`);
+      res.setHeader('Content-Disposition', `attachment; filename="${req.query.filename || `thumb-${req.params.id}.jpg`}"`);
       return createReadStream(thumbnail_path).pipe(res);
     }
 
@@ -179,7 +179,7 @@ router.get('/:id/thumbnail', authenticate, async (req, res) => {
       }
       const buf = Buffer.concat(chunks);
       res.setHeader('Content-Type', 'image/jpeg');
-      res.setHeader('Content-Disposition', `attachment; filename="thumb-${req.params.id}.jpg"`);
+      res.setHeader('Content-Disposition', `attachment; filename="${req.query.filename || `thumb-${req.params.id}.jpg`}"`);
       res.send(buf);
     });
     ffmpeg.on('error', () => res.status(500).json({ error: 'FFmpeg not available' }));
