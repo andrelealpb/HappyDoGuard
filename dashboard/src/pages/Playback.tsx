@@ -546,7 +546,7 @@ function VideoPlayer({
               <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
             </svg>
           </button>
-          <a href={`/api/recordings/${recording.id}/thumbnail?token=${encodeURIComponent(token)}`}
+          <a href={`/api/recordings/${recording.id}/thumbnail?token=${encodeURIComponent(token)}&filename=${encodeURIComponent(buildDownloadName().replace('.mp4', '.jpg'))}`}
             download={buildDownloadName().replace('.mp4', '.jpg')}
             title="Baixar imagem (snapshot)"
             style={{ ...cb, textDecoration: "none", color: "#fff", display: "flex", alignItems: "center" }}>
@@ -554,7 +554,7 @@ function VideoPlayer({
               <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
             </svg>
           </a>
-          <a href={`/api/recordings/${recording.id}/stream?token=${encodeURIComponent(token)}&download=1`}
+          <a href={`/api/recordings/${recording.id}/stream?token=${encodeURIComponent(token)}&download=1&filename=${encodeURIComponent(buildDownloadName())}`}
             download={buildDownloadName()}
             title="Baixar vídeo"
             style={{ ...cb, textDecoration: "none", color: "#fff", display: "flex", alignItems: "center" }}>

@@ -145,15 +145,22 @@ function Visitors() {
       const res = await apiFetch("/api/faces/reimport", { method: "POST" });
       const data = await res.json();
       setReimportStatus(data.message || "Reimportação iniciada");
-      // Poll status every 5s
+      // Poll status every 3s
       const poll = setInterval(async () => {
         try {
           const sr = await apiFetch("/api/faces/reimport/status");
           const st = await sr.json();
-          setReimportStatus(`${st.total_embeddings} embeddings no banco${st.running ? " (em andamento...)" : " (concluído)"}`);
+          const p = st.progress;
+          if (p && p.total > 0) {
+            const processed = p.imported + p.skipped + p.errors;
+            const pct = Math.round((processed / p.total) * 100);
+            setReimportStatus(`${pct}% — ${p.imported} importados, ${p.skipped} já existem, ${p.errors} erros (${p.total} total)${st.running ? "" : " — Concluído!"}`);
+          } else {
+            setReimportStatus(`${st.total_embeddings} embeddings${st.running ? " (iniciando...)" : ""}`);
+          }
           if (!st.running) { clearInterval(poll); setReimporting(false); }
         } catch { clearInterval(poll); setReimporting(false); }
-      }, 5000);
+      }, 3000);
     } catch {
       setReimportStatus("Erro ao iniciar reimportação");
       setReimporting(false);
